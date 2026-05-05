@@ -1,76 +1,71 @@
 version: "3.9"
 
 # ═══════════════════════════════════════════════════════════════
-#  docker-compose.yml — Proyecto Petly (SanosySalvos)
+#  docker-compose.yml — Proyecto Petly
 #
-#  Estructura esperada de carpetas:
-#
-#  tu-workspace/
-#  ├── SanosySalvos/
-#  │   ├── coincidencias-service/
-#  │   ├── geolocalizacion-service/
-#  │   ├── mascotas-service/
-#  │   ├── notificaciones-service/
-#  │   ├── reportes-service/
-#  │   └── usuarios-service/
+#  Estructura del repo:
+#  Petly/
 #  ├── FrontPetly/
-#  └── docker-infra/          ← ESTA CARPETA (aquí corre docker compose up)
-#      ├── docker-compose.yml
-#      ├── nginx.conf          → copiar en FrontPetly/
-#      └── init-db/
-#          └── init.sql
+#  ├── SanosySalvos/
+#  │   ├── usuarios-service/    (puerto 8081)
+#  │   ├── reportes-service/    (puerto 8080 → expuesto 8086)
+#  │   └── ... (otros servicios comentados por ahora)
+#  └── docker-compose.yml   ← ESTE ARCHIVO
 #
-#  Comandos:
-#    cd docker-infra
+#  Uso:
 #    docker compose up --build        ← primera vez
 #    docker compose up -d --build     ← en segundo plano
-#    docker compose down              ← bajar
+#    docker compose down              ← bajar todo
 #    docker compose down -v           ← bajar + borrar BD
 # ═══════════════════════════════════════════════════════════════
 
 services:
 
   # ─────────────────────────────────────────────────────────────
-  # BASE DE DATOS PostgreSQL
+  # 1) BASE DE DATOS — arranca primero
   # ─────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: petly-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: bastian10
-      POSTGRES_DB: bd_Pruebas
+      POSTGRES_PASSWORD: 220206Cj*
+      POSTGRES_DB: bd_Usuarios
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-db:/docker-entrypoint-initdb.d
     networks:
       - petly-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d bd_Pruebas"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d bd_Usuarios"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   # ─────────────────────────────────────────────────────────────
-  # MICROSERVICIOS SPRING BOOT
+  # 2) USUARIOS SERVICE — arranca después de postgres
+  #    Puerto interno: 8081 (configurado en application.properties)
+  #    El frontend llama a: http://localhost:8081/petly/auth/login
+  #                         http://localhost:8081/petly/usuarios/registrar
   # ─────────────────────────────────────────────────────────────
-
   usuarios-service:
     build:
-      context: ../../SanosySalvos/usuarios-service
+      context: ./SanosySalvos/usuarios-service
       dockerfile: Dockerfile
     container_name: petly-usuarios
     ports:
-      - "8081:8080"
+      - "8081:8081"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Pruebas
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Usuarios
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: bastian10
+      SPRING_DATASOURCE_PASSWORD: 220206Cj*
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_SHOW_SQL: "true"
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+      JWT_SECRET: v5zti3ggthj4radzaynh5q9uoezj66cl
+      JWT_EXPIRATION: "3600000"
+      SERVER_PORT: "8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,100 +73,21 @@ services:
       - petly-network
     restart: on-failure
 
-  mascotas-service:
-    build:
-      context: ../../SanosySalvos/mascotas-service
-      dockerfile: Dockerfile
-    container_name: petly-mascotas
-    ports:
-      - "8082:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Pruebas
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: bastian10
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_SHOW_SQL: "true"
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-      SPRING_SECURITY_USER_NAME: admin
-      SPRING_SECURITY_USER_PASSWORD: "1234"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - petly-network
-    restart: on-failure
-
-  coincidencias-service:
-    build:
-      context: ../../SanosySalvos/coincidencias-service
-      dockerfile: Dockerfile
-    container_name: petly-coincidencias
-    ports:
-      - "8083:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Pruebas
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: bastian10
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - petly-network
-    restart: on-failure
-
-  geolocalizacion-service:
-    build:
-      context: ../../SanosySalvos/geolocalizacion-service
-      dockerfile: Dockerfile
-    container_name: petly-geolocalizacion
-    ports:
-      - "8084:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Pruebas
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: bastian10
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - petly-network
-    restart: on-failure
-
-  notificaciones-service:
-    build:
-      context: ../../SanosySalvos/notificaciones-service
-      dockerfile: Dockerfile
-    container_name: petly-notificaciones
-    ports:
-      - "8085:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Pruebas
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: bastian10
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - petly-network
-    restart: on-failure
-
+  # ─────────────────────────────────────────────────────────────
+  # 3) REPORTES SERVICE — arranca después de postgres
+  #    El frontend llama a: /incidents (via proxy nginx)
+  # ─────────────────────────────────────────────────────────────
   reportes-service:
     build:
-      context: ../../SanosySalvos/reportes-service
+      context: ./SanosySalvos/reportes-service
       dockerfile: Dockerfile
     container_name: petly-reportes
     ports:
       - "8086:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Pruebas
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Usuarios
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: bastian10
+      SPRING_DATASOURCE_PASSWORD: 220206Cj*
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
     depends_on:
@@ -182,27 +98,110 @@ services:
     restart: on-failure
 
   # ─────────────────────────────────────────────────────────────
-  # FRONTEND React + Vite + Nginx
+  # 4) FRONTEND — arranca último
+  #    Acceso: http://localhost:3000
+  #
+  #    El nginx.conf hace proxy de las llamadas del frontend:
+  #    /petly/auth/*    → usuarios-service:8081
+  #    /petly/usuarios/* → usuarios-service:8081
+  #    /incidents       → reportes-service:8080
   # ─────────────────────────────────────────────────────────────
   frontend:
     build:
-      context: ../../FrontPetly
+      context: ./FrontPetly
       dockerfile: Dockerfile
+      args:
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:-reemplaza_con_tu_token}
+        VITE_USE_MOCKS: "false"
     container_name: petly-frontend
     ports:
       - "3000:80"
-    environment:
-      # Token de Mapbox (reemplaza con tu token real)
-      VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:-tu_token_mapbox_aqui}
     depends_on:
-      - reportes-service
-      - mascotas-service
       - usuarios-service
+      - reportes-service
     networks:
       - petly-network
 
-# ─────────────────────────────────────────────────────────────
-# VOLÚMENES Y RED
+  # ─────────────────────────────────────────────────────────────
+  # SERVICIOS PENDIENTES (descomentar cuando estén listos)
+  # ─────────────────────────────────────────────────────────────
+
+  # mascotas-service:
+  #   build:
+  #     context: ./SanosySalvos/mascotas-service
+  #     dockerfile: Dockerfile
+  #   container_name: petly-mascotas
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Usuarios
+  #     SPRING_DATASOURCE_USERNAME: postgres
+  #     SPRING_DATASOURCE_PASSWORD: 220206Cj*
+  #     SPRING_JPA_HIBERNATE_DDL_AUTO: update
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - petly-network
+  #   restart: on-failure
+
+  # coincidencias-service:
+  #   build:
+  #     context: ./SanosySalvos/coincidencias-service
+  #     dockerfile: Dockerfile
+  #   container_name: petly-coincidencias
+  #   ports:
+  #     - "8083:8080"
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Usuarios
+  #     SPRING_DATASOURCE_USERNAME: postgres
+  #     SPRING_DATASOURCE_PASSWORD: 220206Cj*
+  #     SPRING_JPA_HIBERNATE_DDL_AUTO: update
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - petly-network
+  #   restart: on-failure
+
+  # geolocalizacion-service:
+  #   build:
+  #     context: ./SanosySalvos/geolocalizacion-service
+  #     dockerfile: Dockerfile
+  #   container_name: petly-geolocalizacion
+  #   ports:
+  #     - "8084:8080"
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Usuarios
+  #     SPRING_DATASOURCE_USERNAME: postgres
+  #     SPRING_DATASOURCE_PASSWORD: 220206Cj*
+  #     SPRING_JPA_HIBERNATE_DDL_AUTO: update
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - petly-network
+  #   restart: on-failure
+
+  # notificaciones-service:
+  #   build:
+  #     context: ./SanosySalvos/notificaciones-service
+  #     dockerfile: Dockerfile
+  #   container_name: petly-notificaciones
+  #   ports:
+  #     - "8085:8080"
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bd_Usuarios
+  #     SPRING_DATASOURCE_USERNAME: postgres
+  #     SPRING_DATASOURCE_PASSWORD: 220206Cj*
+  #     SPRING_JPA_HIBERNATE_DDL_AUTO: update
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   networks:
+  #     - petly-network
+  #   restart: on-failure
+
 # ─────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
